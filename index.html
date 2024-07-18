@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scansione Carta di Credito</title>
+    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden;
+        }
+        #camera {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        #canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <video id="camera" playsinline autoplay></video>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const video = document.getElementById('camera');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        async function startCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
+        }
+
+        async function scanCard() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const result = await Tesseract.recognize(canvas, 'eng', {
+                logger: m => console.log(m)
+            });
+
+            const cardInfo = parseCardInfo(result.data.text);
+            if (cardInfo) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(cardInfo));
+            }
+        }
+
+        function parseCardInfo(text) {
+            const cardNumber = text.match(/\b(?:\d{4}[-\s]?){3}\d{4}\b/);
+            const expiryDate = text.match(/\b(0[1-9]|1[0-2])\/\d{2}\b/);
+            const cvv = text.match(/\b\d{3,4}\b/);
+
+            if (cardNumber) {
+                return {
+                    cardNumber: cardNumber[0].replace(/[-\s]/g, ''),
+                    expiryDate: expiryDate ? expiryDate[0] : null,
+                    cvv: cvv ? cvv[0] : null
+                };
+            }
+            return null;
+        }
+
+        startCamera();
+        setInterval(scanCard, 1000); // Scansiona ogni secondo
+    </script>
+</body>
+</html>
