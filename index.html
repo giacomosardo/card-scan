@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scansione Carta di Credito</title>
-    <script src='https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js'></script>
+    <script src='https://unpkg.com/tesseract.js@v5.1.0/dist/tesseract.min.js'></script>
     <style>
         body, html {
             margin: 0;
@@ -41,9 +41,10 @@
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
             
-            const result = await Tesseract.recognize(canvas, 'eng', {
-                logger: m => console.log(m)
-            });
+            const worker = await Tesseract.createWorker('eng');
+            const result = await worker.recognize(canvas);
+            console.log(result.data.text);
+            await worker.terminate();
 
             const cardInfo = parseCardInfo(result.data.text);
             if (cardInfo) {
@@ -67,7 +68,10 @@
         }
 
         startCamera();
-        setInterval(scanCard, 1000); // Scansiona ogni secondo
+        setInterval(()=>{
+            console.log('Scanning...');
+            scanCard();
+        }, 3000); // Scansiona ogni secondo
     </script>
 </body>
 </html>
