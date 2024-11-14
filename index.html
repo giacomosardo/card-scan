@@ -30,129 +30,48 @@
         const video = document.getElementById('camera');
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-        let worker = null;
 
         async function startCamera() {
-            try {
-                const constraints = {
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                };
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = stream;
-                await video.play();
-            } catch (error) {
-                console.error('Errore nell\'accesso alla fotocamera:', error);
-            }
-        }
-
-        async function initWorker() {
-            if (!worker) {
-                worker = await Tesseract.createWorker('eng+ita');
-                await worker.setParameters({
-                    tessedit_char_whitelist: '0123456789/- ',
-                });
-            }
-            return worker;
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
         }
 
         async function scanCard() {
-            try {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const worker = await initWorker();
-                const result = await worker.recognize(canvas);
-                console.log('Testo rilevato:', result.data.text);
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const worker = await Tesseract.createWorker('eng');
+            const result = await worker.recognize(canvas);
+            console.log(result.data.text);
+            await worker.terminate();
 
-                const cardInfo = parseCardInfo(result.data.text);
-                if (cardInfo) {
-                    window.ReactNativeWebView.postMessage(JSON.stringify(cardInfo));
-                    return true;
-                }
-                return false;
-            } catch (error) {
-                console.error('Errore durante la scansione:', error);
-                return false;
+            const cardInfo = parseCardInfo(result.data.text);
+            if (cardInfo) {
+                window.ReactNativeWebView.postMessage(JSON.stringify(cardInfo));
             }
         }
 
         function parseCardInfo(text) {
-            // Regex migliorata per il numero della carta
-            const cardNumber = text.match(/\b[0-9]{4}[\s-]?[0-9]{4}[\s-]?[0-9]{4}[\s-]?[0-9]{4}\b/);
-            // Regex migliorata per la data di scadenza
-            const expiryDate = text.match(/\b(0[1-9]|1[0-2])\/?([0-9]{2}|[0-9]{4})\b/);
-            // Regex migliorata per il CVV
-            const cvv = text.match(/\b([0-9]{3}|[0-9]{4})\b/);
+            const cardNumber = text.match(/\b(?:\d{4}[-\s]?){3}\d{4}\b/);
+            const expiryDate = text.match(/\b(0[1-9]|1[0-2])\/\d{2}\b/);
+            const cvv = text.match(/\b\d{3,4}\b/);
 
             if (cardNumber) {
-                const cleanCardNumber = cardNumber[0].replace(/[-\s]/g, '');
-                // Validazione del numero della carta usando l'algoritmo di Luhn
-                if (isValidCardNumber(cleanCardNumber)) {
-                    return {
-                        cardNumber: cleanCardNumber,
-                        expiryDate: expiryDate ? formatExpiryDate(expiryDate[0]) : null,
-                        cvv: cvv ? cvv[0] : null,
-                        timestamp: new Date().toISOString()
-                    };
-                }
+                return {
+                    cardNumber: cardNumber[0].replace(/[-\s]/g, ''),
+                    expiryDate: expiryDate ? expiryDate[0] : null,
+                    cvv: cvv ? cvv[0] : null
+                };
             }
             return null;
         }
 
-        function isValidCardNumber(number) {
-            let sum = 0;
-            let isEven = false;
-            
-            for (let i = number.length - 1; i >= 0; i--) {
-                let digit = parseInt(number[i]);
-                
-                if (isEven) {
-                    digit *= 2;
-                    if (digit > 9) {
-                        digit -= 9;
-                    }
-                }
-                
-                sum += digit;
-                isEven = !isEven;
-            }
-            
-            return sum % 10 === 0;
-        }
-
-        function formatExpiryDate(date) {
-            return date.replace(/^(\d{2})\/?(\d{2,4})$/, '$1/$2');
-        }
-
-        // Avvia la fotocamera e inizia la scansione
-        startCamera().then(() => {
-            console.log('Fotocamera avviata con successo');
-            
-            let isScanning = false;
-            const SCAN_INTERVAL = 2000; // 2 secondi tra le scansioni
-            
-            setInterval(async () => {
-                // Evita scansioni sovrapposte
-                if (isScanning) return;
-                
-                try {
-                    isScanning = true;
-                    console.log('Scansione in corso...');
-                    await scanCard();
-                } catch (error) {
-                    console.error('Errore durante la scansione:', error);
-                } finally {
-                    isScanning = false;
-                }
-            }, SCAN_INTERVAL);
-        }).catch(error => {
-            console.error('Errore nell\'avvio della fotocamera:', error);
-        });
+        startCamera();
+        setInterval(()=>{
+            console.log('Scanning...');
+            scanCard();
+        }, 3000); // Scansiona ogni secondo
     </script>
 </body>
 </html>
